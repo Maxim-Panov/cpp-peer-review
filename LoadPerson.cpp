@@ -85,13 +85,11 @@ optional<vector<Person>> LoadPersons(DataBaseHandler& handler, int min_age, int 
 
 
 int main() {
-    DataBaseHandler handler;
-    handler.SetDataBaseName("SimpleDb"s).SetTimeout(100).SetLogLevel(DBLogLevel::HIGH).SetException(true);
     auto result = LoadPersons({ DataBaseHandler().SetDataBaseName("SimpleDB").SetLogLevel(DBLogLevel::HIGH)
-                                                .SetTimeout(100).SetException(true) },
-                                Min_age(10),
-                                Max_age(100),
-              /*DB filter*/     "Ivanov");
+                                                 .SetTimeout(100).SetException(true) }
+                                                 ,Min_age(10)
+                                                 ,Max_age(100)
+                                                 ,"Ivanov");      /*DB filter*/
     if (!result)
         cout << "DB isn't ok!";
     return 0;
