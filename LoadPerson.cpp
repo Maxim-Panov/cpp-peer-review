@@ -1,61 +1,98 @@
+#include <iostream>
+#include <optional>
+#include <sstream>
+#include <string_view>
+#include <vector>
 
-struct DateTime {
-    int second = 0;
-    int minute = 0;
-    int hour = 0;
-    int day = 0;
-    int month = 0;
-    int year = 0;
+using namespace std;
+
+struct Person
+{
+    string name;
+    int age;
 };
 
-void CheckDateTimeValidity(const DateTime& dt) {
-    if (dt.year < 1) {
-        throw domain_error("year is too small"s);
+enum class DBLogLevel
+{
+    HIGH,
+    LOW
+};
+
+struct DataBaseHandler {
+    DataBaseHandler& SetDataBaseName(string&& name) {
+        db_name_ = move(name);
+        return *this;
     }
-    if (dt.year > 9999) {
-        throw domain_error("year is too big"s);
+    DataBaseHandler& SetTimeout(int timeout) {
+        connetion_timeout_ = timeout;
+        return *this;
+    }
+    DataBaseHandler& SetException(bool except) {
+        allow_exceptions_ = except;
+        return *this;
+    }
+    DataBaseHandler& SetLogLevel(DBLogLevel level) {
+        log_level_ = level;
+        return *this;
     }
 
-    if (dt.month < 1) {
-        throw domain_error("month is too small"s);
-    }
-    if (dt.month > 12) {
-        throw domain_error("month is too big"s);
+    string db_name_ = "None";
+    int connetion_timeout_ = 100;
+    bool allow_exceptions_ = false;
+    DBLogLevel log_level_ = DBLogLevel::LOW;
+};
+
+#define DECLARE_INT_PARAM(Name) \
+    struct Name {               \
+        int value;              \
+        explicit Name(int v)    \
+            : value(v) {        \
+        }                       \
+        operator int() const {  \
+            return value;       \
+        }                       \
     }
 
-    const bool is_leap_year = (dt.year % 4 == 0) && !(dt.year % 100 == 0 && dt.year % 400 != 0);
-    const array month_lengths = { 31, 28 + is_leap_year, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+DECLARE_INT_PARAM(Min_age);
+DECLARE_INT_PARAM(Max_age);
 
-    if (dt.day < 1) {
-        throw domain_error("day is too small"s);
+optional<vector<Person>> LoadPersons(DataBaseHandler& handler, int min_age, int max_age, string_view name_filter) {
+    DBConnector connector(handler.allow_exceptions_, handler.log_level_);
+    DBHandler db;
+    if (handler.db_name_.starts_with("tmp."s)) {
+        db = connector.ConnectTmp(handler.db_name_, handler.connetion_timeout_);
     }
-    if (dt.day > month_lengths[dt.month - 1]) {
-        throw domain_error("day is too big"s);
+    else {
+        db = connector.Connect(handler.db_name_, handler.connetion_timeout_);
     }
-
-    if (dt.hour < 0) {
-        throw domain_error("hour is too small"s);
-    }
-    if (dt.hour > 23) {
-        throw domain_error("hour is too big"s);
-    }
-
-    if (dt.minute < 0) {
-        throw domain_error("minute is too small"s);
-    }
-    if (dt.minute > 59) {
-        throw domain_error("minute is too big"s);
+    if (!handler.allow_exceptions_ && !db.IsOK()) {
+        return nullopt;
     }
 
-    if (dt.second < 0) {
-        throw domain_error("second is too small");
+    ostringstream query_str;
+    query_str << "from Persons "s
+        << "select Name, Age "s
+        << "where Age between "s << min_age << " and "s << max_age << " "s
+        << "and Name like '%"s << db.Quote(name_filter) << "%'"s;
+    DBQuery query(query_str.str());
+
+    vector<Person> persons;
+    for (auto [name, age] : db.LoadRows<string, int>(query)) {
+        persons.push_back({ move(name), age });
     }
-    if (dt.second > 59) {
-        throw domain_error("second is too big"s);
-    }
+    return persons;
 }
 
-int main() {
 
+int main() {
+    DataBaseHandler handler;
+    handler.SetDataBaseName("SimpleDb"s).SetTimeout(100).SetLogLevel(DBLogLevel::HIGH).SetException(true);
+    auto result = LoadPersons({ DataBaseHandler().SetDataBaseName("SimpleDB").SetLogLevel(DBLogLevel::HIGH)
+                                                .SetTimeout(100).SetException(true) },
+                                Min_age(10),
+                                Max_age(100),
+              /*DB filter*/     "Ivanov");
+    if (!result)
+        cout << "DB isn't ok!";
     return 0;
 }
